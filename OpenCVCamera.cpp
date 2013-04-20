@@ -1,6 +1,7 @@
 // STL Header
 #include <array>
 #include <vector>
+#include <set>
 #include <sstream>
 
 // OpenNI Header
@@ -22,6 +23,26 @@ inline OniVideoMode BuildMode( int W, int H, int FPS )
 	mMode.fps = FPS;
 
 	return mMode;
+}
+
+bool operator<( const OniVideoMode& m1, const OniVideoMode& m2 )
+{
+	if( m1.resolutionX < m2.resolutionX )
+		return true;
+	else if( m1.resolutionX > m2.resolutionX )
+		return false;
+	
+	if( m1.resolutionY < m2.resolutionY )
+		return true;
+	else if( m1.resolutionY > m2.resolutionY )
+		return false;
+
+	if( m1.fps < m2.fps )
+		return true;
+	else if( m1.fps > m2.fps )
+		return false;
+
+	return false;
 }
 
 class OpenCV_Color_Stream : public oni::driver::StreamBase
@@ -155,7 +176,7 @@ protected:
 				rFrame.croppingEnabled	= FALSE;
 				rFrame.sensorType		= ONI_SENSOR_COLOR;
 				rFrame.stride			= m_uStride;
-				rFrame.timestamp		= m_iFrameId * 33000;
+				rFrame.timestamp		= uint64_t( m_Camera.get( CV_CAP_PROP_POS_MSEC ) );
 
 				// create reference counter
 				pFrame->pDriverCookie = xnOSMalloc( sizeof( int ) );
@@ -210,17 +231,22 @@ public:
 	{
 		m_sensors[0].sensorType = ONI_SENSOR_COLOR;
 
-		std::vector<OniVideoMode> vSupportedMode;
+		std::set<OniVideoMode> vSupportedMode;
 		cv::VideoCapture mCamera( pInfo->usbProductId );
 		if( mCamera.isOpened() )
 		{
 			// get default camera mode
 			OniVideoMode mMode;
+			mMode.pixelFormat	= ONI_PIXEL_FORMAT_RGB888;
 			mMode.resolutionX	= int( mCamera.get( CV_CAP_PROP_FRAME_WIDTH ) );
 			mMode.resolutionY	= int( mCamera.get( CV_CAP_PROP_FRAME_HEIGHT ) );
 			mMode.fps			= int( mCamera.get( CV_CAP_PROP_FPS ) );
-			mMode.pixelFormat	= ONI_PIXEL_FORMAT_RGB888;
-			vSupportedMode.push_back( mMode );
+
+			// I don't know why, but OpenCV return 0 for FPS in my computer
+			if( mMode.fps == 0 )
+				mMode.fps = 30;
+
+			vSupportedMode.insert( mMode );
 
 			// test mode
 			for( auto itMode = rTestMode.begin(); itMode != rTestMode.end(); ++ itMode )
@@ -229,7 +255,7 @@ public:
 					mCamera.set( CV_CAP_PROP_FRAME_HEIGHT, itMode->resolutionY ) &&
 					mCamera.set( CV_CAP_PROP_FPS, itMode->fps ) )
 				{
-					vSupportedMode.push_back( *itMode );
+					vSupportedMode.insert( *itMode );
 				}
 			}
 
@@ -237,10 +263,12 @@ public:
 
 			m_sensors[0].numSupportedVideoModes = vSupportedMode.size();
 			m_sensors[0].pSupportedVideoModes = XN_NEW_ARR(OniVideoMode, vSupportedMode.size());
-			for( size_t i = 0; i < vSupportedMode.size(); ++ i )
+			int	iIdx = 0;
+			for( auto itMode = vSupportedMode.begin(); itMode != vSupportedMode.end(); ++ itMode )
 			{
-				m_sensors[0].pSupportedVideoModes[i] = vSupportedMode[i];
-				m_sensors[0].pSupportedVideoModes[i].pixelFormat = ONI_PIXEL_FORMAT_RGB888;
+				m_sensors[0].pSupportedVideoModes[iIdx] = *itMode;
+				m_sensors[0].pSupportedVideoModes[iIdx].pixelFormat = ONI_PIXEL_FORMAT_RGB888;
+				++ iIdx;
 			}
 		}
 	}
@@ -401,8 +429,6 @@ public:
 				return;
 			}
 		}
-
-		// not our device?!
 		XN_ASSERT(FALSE);
 	}
 
