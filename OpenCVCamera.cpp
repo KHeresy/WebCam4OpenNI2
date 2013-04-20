@@ -1,4 +1,6 @@
 // STL Header
+#include <array>
+#include <vector>
 #include <sstream>
 
 // OpenNI Header
@@ -12,20 +14,24 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
+inline OniVideoMode BuildMode( int W, int H, int FPS )
+{
+	OniVideoMode mMode;
+	mMode.resolutionX = W;
+	mMode.resolutionY = H;
+	mMode.fps = FPS;
 
-#define TEST_RESOLUTION_X 640
-#define TEST_RESOLUTION_Y 480
+	return mMode;
+}
 
 class OpenCV_Color_Stream : public oni::driver::StreamBase
 {
 public:
 	OpenCV_Color_Stream( int iDeviceId ) : oni::driver::StreamBase()
 	{
-		m_osEvent.Create(TRUE);
-		m_sendCount = 0;
-		m_frameId = 1;
-
+		m_iFrameId = 0;
 		m_Camera.open(iDeviceId);
+		UpdateData();
 	}
 
 	~OpenCV_Color_Stream()
@@ -36,22 +42,21 @@ public:
 	OniStatus start()
 	{
 		xnOSCreateThread(threadFunc, this, &m_threadHandle);
-
 		return ONI_STATUS_OK;
 	}
 
 	void stop()
 	{
-		m_running = false;
+		m_bRunning = false;
 	}
 
-	OniStatus SetVideoMode(OniVideoMode*) {return ONI_STATUS_NOT_IMPLEMENTED;}
+	OniStatus SetVideoMode(OniVideoMode*){
+		return ONI_STATUS_NOT_IMPLEMENTED;
+	}
+
 	OniStatus GetVideoMode(OniVideoMode* pVideoMode)
 	{
-		pVideoMode->pixelFormat = ONI_PIXEL_FORMAT_DEPTH_1_MM;
-		pVideoMode->fps = 30;
-		pVideoMode->resolutionX = TEST_RESOLUTION_X;
-		pVideoMode->resolutionY = TEST_RESOLUTION_Y;
+		*pVideoMode = m_VideoMode;
 		return ONI_STATUS_OK;
 	}
 
@@ -81,52 +86,10 @@ public:
 			}
 			return SetVideoMode((OniVideoMode*)data);
 		}
-		else if (propertyId == 666)
-		{
-			if (dataSize != sizeof(int))
-			{
-				printf("Unexpected size: %d != %d\n", dataSize, sizeof(int));
-				return ONI_STATUS_ERROR;
-			}
-
-			// Increment the send count.
-			m_cs.Lock();
-			m_sendCount += *((int*)data);
-			m_cs.Unlock();
-
-			// Raise the OS event, to allow thread to start working.
-			m_osEvent.Set();
-		}
 
 		return ONI_STATUS_NOT_IMPLEMENTED;
 	}
-
-	virtual int GetBytesPerPixel() { return sizeof(OniRGB888Pixel); }
-
-	OniDriverFrame* AcquireFrame()
-	{
-		OniDriverFrame* pFrame = (OniDriverFrame*)xnOSCalloc(1, sizeof(OniDriverFrame));
-		if (pFrame == NULL)
-		{
-			XN_ASSERT(FALSE);
-			return NULL;
-		}
-
-		int dataSize = TEST_RESOLUTION_X * TEST_RESOLUTION_Y * GetBytesPerPixel();
-		pFrame->frame.data = xnOSMallocAligned(dataSize, XN_DEFAULT_MEM_ALIGN);
-		if (pFrame->frame.data == NULL)
-		{
-			XN_ASSERT(FALSE);
-			return NULL;
-		}
-
-		pFrame->pDriverCookie = xnOSMalloc(sizeof(int));
-		*((int*)pFrame->pDriverCookie) = 1;
-
-		pFrame->frame.dataSize = dataSize;
-		return pFrame;
-	}
-
+	
 	void addRefToFrame(OniDriverFrame* pFrame)
 	{
 		++(*((int*)pFrame->pDriverCookie));
@@ -148,88 +111,127 @@ protected:
 	static XN_THREAD_PROC threadFunc(XN_THREAD_PARAM pThreadParam)
 	{
 		OpenCV_Color_Stream* pStream = (OpenCV_Color_Stream*)pThreadParam;
-		pStream->m_running = true;
+		pStream->m_bRunning = true;
 
-		while (pStream->m_running)
+		while( pStream->m_bRunning )
 		{
-			//pStream->m_osEvent.Wait(XN_WAIT_INFINITE);
-			int count = 0;
-			do 
-			{
-				// Get the current count.
-				pStream->m_cs.Lock();
-				count = pStream->m_sendCount;
-				if (pStream->m_sendCount > 0)
-				{
-					pStream->m_sendCount--;
-				}
-				pStream->m_cs.Unlock();
-				OniDriverFrame* pFrame = pStream->AcquireFrame();
-				pStream->BuildFrame(&pFrame->frame);
-				pStream->raiseNewFrame(pFrame);
-
-			} while (count > 0);
+			pStream->UpdateData();
 		}
 
 		XN_THREAD_PROC_RETURN(XN_STATUS_OK);
 	}
 
-	virtual int BuildFrame(OniFrame* pFrame)
+	void UpdateData()
 	{
+		#pragma region OpenCV Code
 		// get new image
 		cv::Mat mImg;
 		m_Camera >> mImg;
+
+		// convert image form BGR to RGB
 		cv::cvtColor( mImg, m_FrameRBG, CV_BGR2RGB );
-		memcpy( pFrame->data, m_FrameRBG.data, pFrame->dataSize );
+		#pragma endregion
 
-		pFrame->frameIndex = m_frameId;
+		#pragma region Build OniDriverFrame
+		// create frame
+		OniDriverFrame* pFrame = (OniDriverFrame*)xnOSCalloc( 1, sizeof( OniDriverFrame ) );
+		if( pFrame != NULL )
+		{
+			// create the buffer of image
+			OniFrame& rFrame = pFrame->frame;
+			rFrame.data = xnOSMallocAligned( m_uDataSize, XN_DEFAULT_MEM_ALIGN );
+			if( rFrame.data != NULL )
+			{
+				// copy data from cv::Mat to OniDriverFrame
+				rFrame.dataSize = m_uDataSize;
+				memcpy( rFrame.data, m_FrameRBG.data, m_uDataSize );
 
-		pFrame->videoMode.pixelFormat = ONI_PIXEL_FORMAT_RGB888;
-		pFrame->videoMode.resolutionX = TEST_RESOLUTION_X;
-		pFrame->videoMode.resolutionY = TEST_RESOLUTION_Y;
-		pFrame->videoMode.fps = 30;
+				// update metadata
+				rFrame.frameIndex		= ++m_iFrameId;
+				rFrame.videoMode		= m_VideoMode;
+				rFrame.width			= mImg.cols;
+				rFrame.height			= mImg.rows;
+				rFrame.cropOriginX		= rFrame.cropOriginY = 0;
+				rFrame.croppingEnabled	= FALSE;
+				rFrame.sensorType		= ONI_SENSOR_COLOR;
+				rFrame.stride			= m_uStride;
+				rFrame.timestamp		= m_iFrameId * 33000;
 
-		pFrame->width = TEST_RESOLUTION_X;
-		pFrame->height = TEST_RESOLUTION_Y;
+				// create reference counter
+				pFrame->pDriverCookie = xnOSMalloc( sizeof( int ) );
+				*((int*)pFrame->pDriverCookie) = 1;
 
-		pFrame->cropOriginX = pFrame->cropOriginY = 0;
-		pFrame->croppingEnabled = FALSE;
-
-		pFrame->sensorType = ONI_SENSOR_COLOR;
-		pFrame->stride = TEST_RESOLUTION_X * sizeof(OniRGB888Pixel);
-		pFrame->timestamp = m_frameId * 33000;
-		m_frameId++;
-		return 1;
+				// raise new frame
+				raiseNewFrame( pFrame );
+			}
+			else
+			{
+				XN_ASSERT(FALSE);
+				return;
+			}
+		}
+		else
+		{
+			XN_ASSERT( FALSE );
+			return;
+		}
+		#pragma endregion
 	}
 
-	int m_frameId;
+	void UpdateVideoMode()
+	{
+		// get current mode
+		m_VideoMode.resolutionX	= int( m_Camera.get( CV_CAP_PROP_FRAME_WIDTH ) );
+		m_VideoMode.resolutionY	= int( m_Camera.get( CV_CAP_PROP_FRAME_HEIGHT ) );
+		m_VideoMode.fps			= int( m_Camera.get( CV_CAP_PROP_FPS ) );
+		m_VideoMode.pixelFormat	= ONI_PIXEL_FORMAT_RGB888;
 
+		// precompute metadata
+		m_uStride	= m_VideoMode.resolutionX * sizeof( OniRGB888Pixel );
+		m_uDataSize	= m_uStride * m_VideoMode.resolutionY;
+	}
 
-	int singleRes(int x, int y) {return y*TEST_RESOLUTION_X+x;}
-
-	bool m_running;
-	int m_sendCount;
+protected:
+	int		m_iFrameId;
+	bool	m_bRunning;
+	size_t	m_uDataSize;
+	size_t	m_uStride;
 
 	XN_THREAD_HANDLE		m_threadHandle;
-	xnl::CriticalSection	m_cs;
-	xnl::OSEvent			m_osEvent;
 	cv::VideoCapture		m_Camera;
 	cv::Mat					m_FrameRBG;
+	OniVideoMode			m_VideoMode;
 };
 
 class OpenCV_Camera_Device : public oni::driver::DeviceBase
 {
 public:
-	OpenCV_Camera_Device(OniDeviceInfo* pInfo, oni::driver::DriverServices& driverServices) : m_pInfo(pInfo), m_driverServices(driverServices)
+	OpenCV_Camera_Device(OniDeviceInfo* pInfo, const std::vector<OniVideoMode>& rTestMode, oni::driver::DriverServices& driverServices ) : m_pInfo(pInfo), m_driverServices(driverServices)
 	{
 		m_sensors[0].sensorType = ONI_SENSOR_COLOR;
 
-		m_sensors[0].numSupportedVideoModes = 1;
-		m_sensors[0].pSupportedVideoModes = XN_NEW_ARR(OniVideoMode, 1);
-		m_sensors[0].pSupportedVideoModes[0].pixelFormat = ONI_PIXEL_FORMAT_RGB888;
-		m_sensors[0].pSupportedVideoModes[0].fps = 30;
-		m_sensors[0].pSupportedVideoModes[0].resolutionX = TEST_RESOLUTION_X;
-		m_sensors[0].pSupportedVideoModes[0].resolutionY = TEST_RESOLUTION_Y;
+		std::vector<OniVideoMode> vSupportedMode;
+		cv::VideoCapture mCamera( pInfo->usbProductId );
+		if( mCamera.isOpened() )
+		{
+			for( auto itMode = rTestMode.begin(); itMode != rTestMode.end(); ++ itMode )
+			{
+				if( mCamera.set( CV_CAP_PROP_FRAME_WIDTH, itMode->resolutionX ) &&
+					mCamera.set( CV_CAP_PROP_FRAME_HEIGHT, itMode->resolutionY ) &&
+					mCamera.set( CV_CAP_PROP_FPS, itMode->fps ) )
+				{
+					vSupportedMode.push_back( *itMode );
+				}
+			}
+
+			m_sensors[0].numSupportedVideoModes = vSupportedMode.size();
+			m_sensors[0].pSupportedVideoModes = XN_NEW_ARR(OniVideoMode, vSupportedMode.size());
+			for( size_t i = 0; i < vSupportedMode.size(); ++ i )
+			{
+				m_sensors[0].pSupportedVideoModes[i] = vSupportedMode[i];
+				m_sensors[0].pSupportedVideoModes[i].pixelFormat = ONI_PIXEL_FORMAT_RGB888;
+			}
+		}
 	}
 
 	OniDeviceInfo* GetInfo()
@@ -288,6 +290,7 @@ public:
 		}
 		return rc;
 	}
+
 private:
 	OpenCV_Camera_Device(const OpenCV_Camera_Device&);
 	void operator=(const OpenCV_Camera_Device&);
@@ -301,7 +304,16 @@ class OpenCV_Camera_Driver : public oni::driver::DriverBase
 {
 public:
 	OpenCV_Camera_Driver(OniDriverServices* pDriverServices) : DriverBase(pDriverServices)
-	{}
+	{
+		m_bListDevice	= true;
+		m_iMaxTestNum	= 10;
+		m_sDeviceName	= "\\OpenCV\\Camera\\";
+		m_sVendorName	= "OpenCV Camera by Heresy";
+
+		m_vModeToTest.push_back( BuildMode( 720, 480, 30 ) );
+		m_vModeToTest.push_back( BuildMode( 640, 480, 30 ) );
+		m_vModeToTest.push_back( BuildMode( 320, 240, 30 ) );
+	}
 
 	OniStatus initialize(	oni::driver::DeviceConnectedCallback connectedCallback,
 							oni::driver::DeviceDisconnectedCallback disconnectedCallback,
@@ -311,25 +323,26 @@ public:
 		if( oni::driver::DriverBase::initialize(connectedCallback, disconnectedCallback, deviceStateChangedCallback, pCookie) == ONI_STATUS_OK )
 		{
 			int iCounter = 0;
-			bool bTest = true;
-			while( bTest )
+			while( iCounter < m_iMaxTestNum )
 			{
 				cv::VideoCapture mCamera( iCounter );
 				if( mCamera.isOpened() )
 				{
 					std::stringstream ss;
-					ss << "\\OpenCV\\Camera\\" << ( iCounter + 1 );
+					ss << m_sDeviceName << ( iCounter + 1 );
 					std::string sText = ss.str();
 
 					OniDeviceInfo* pInfo = XN_NEW(OniDeviceInfo);
-					xnOSStrCopy( pInfo->vendor, "OpenCV", ONI_MAX_STR);
+					xnOSStrCopy( pInfo->vendor, m_sVendorName.c_str(), ONI_MAX_STR);
 					xnOSStrCopy( pInfo->name, sText.c_str(), ONI_MAX_STR);
 					xnOSStrCopy( pInfo->uri, sText.c_str(), ONI_MAX_STR);
 					pInfo->usbProductId = uint16_t( iCounter );
 					m_devices[pInfo] = NULL;
-					deviceConnected(pInfo);
-					deviceStateChanged(pInfo, 0);
-
+					if( m_bListDevice )
+					{
+						deviceConnected(pInfo);
+						deviceStateChanged(pInfo, 0);
+					}
 					++iCounter;
 				}
 				else
@@ -354,7 +367,7 @@ public:
 					return iter->Value();
 				}
 
-				OpenCV_Camera_Device* pDevice = XN_NEW(OpenCV_Camera_Device, iter->Key(), getServices());
+				OpenCV_Camera_Device* pDevice = XN_NEW(OpenCV_Camera_Device, iter->Key(), m_vModeToTest, getServices());
 				iter->Value() = pDevice;
 				return pDevice;
 			}
@@ -382,28 +395,30 @@ public:
 
 	virtual OniStatus tryDevice(const char* uri)
 	{
-		if (xnOSStrCmp(uri, "Test"))
+		for (xnl::Hash<OniDeviceInfo*, oni::driver::DeviceBase*>::Iterator iter = m_devices.Begin(); iter != m_devices.End(); ++iter)
 		{
-			return ONI_STATUS_ERROR;
+			if (xnOSStrCmp(iter->Key()->uri, uri) == 0)
+			{
+				// Found
+				if (iter->Value() == NULL)
+				{
+					deviceConnected( iter->Key() );
+				}
+
+				return ONI_STATUS_OK;
+			}
 		}
-
-
-		OniDeviceInfo* pInfo = XN_NEW(OniDeviceInfo);
-		xnOSStrCopy(pInfo->uri, uri, ONI_MAX_STR);
-		xnOSStrCopy(pInfo->vendor, "Test", ONI_MAX_STR);
-		m_devices[pInfo] = NULL;
-
-		deviceConnected(pInfo);
-
-		return ONI_STATUS_OK;
+		return DriverBase::tryDevice(uri);
 	}
 
 	void shutdown() {}
 
 protected:
-
-	XN_THREAD_HANDLE m_threadHandle;
-
+	bool		m_bListDevice;
+	int			m_iMaxTestNum;
+	std::string	m_sDeviceName;
+	std::string	m_sVendorName;
+	std::vector<OniVideoMode>	m_vModeToTest;
 	xnl::Hash<OniDeviceInfo*, oni::driver::DeviceBase*> m_devices;
 };
 
