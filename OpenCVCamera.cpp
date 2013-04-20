@@ -31,7 +31,7 @@ public:
 	{
 		m_iFrameId = 0;
 		m_Camera.open(iDeviceId);
-		UpdateData();
+		UpdateVideoMode();
 	}
 
 	~OpenCV_Color_Stream()
@@ -214,6 +214,15 @@ public:
 		cv::VideoCapture mCamera( pInfo->usbProductId );
 		if( mCamera.isOpened() )
 		{
+			// get default camera mode
+			OniVideoMode mMode;
+			mMode.resolutionX	= int( mCamera.get( CV_CAP_PROP_FRAME_WIDTH ) );
+			mMode.resolutionY	= int( mCamera.get( CV_CAP_PROP_FRAME_HEIGHT ) );
+			mMode.fps			= int( mCamera.get( CV_CAP_PROP_FPS ) );
+			mMode.pixelFormat	= ONI_PIXEL_FORMAT_RGB888;
+			vSupportedMode.push_back( mMode );
+
+			// test mode
 			for( auto itMode = rTestMode.begin(); itMode != rTestMode.end(); ++ itMode )
 			{
 				if( mCamera.set( CV_CAP_PROP_FRAME_WIDTH, itMode->resolutionX ) &&
@@ -223,6 +232,8 @@ public:
 					vSupportedMode.push_back( *itMode );
 				}
 			}
+
+			mCamera.release();
 
 			m_sensors[0].numSupportedVideoModes = vSupportedMode.size();
 			m_sensors[0].pSupportedVideoModes = XN_NEW_ARR(OniVideoMode, vSupportedMode.size());
@@ -328,6 +339,8 @@ public:
 				cv::VideoCapture mCamera( iCounter );
 				if( mCamera.isOpened() )
 				{
+					mCamera.release();
+
 					std::stringstream ss;
 					ss << m_sDeviceName << ( iCounter + 1 );
 					std::string sText = ss.str();
