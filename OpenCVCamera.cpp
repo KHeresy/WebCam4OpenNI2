@@ -71,26 +71,20 @@ public:
 		m_bRunning = false;
 	}
 
-	OniStatus SetVideoMode(OniVideoMode*){
-		return ONI_STATUS_NOT_IMPLEMENTED;
-	}
-
-	OniStatus GetVideoMode(OniVideoMode* pVideoMode)
-	{
-		*pVideoMode = m_VideoMode;
-		return ONI_STATUS_OK;
-	}
-
 	OniStatus getProperty(int propertyId, void* data, int* pDataSize)
 	{
 		if (propertyId == ONI_STREAM_PROPERTY_VIDEO_MODE)
 		{
-			if (*pDataSize != sizeof(OniVideoMode))
+			if (*pDataSize == sizeof(OniVideoMode))
+			{
+				(*(OniVideoMode*)data) = m_VideoMode;
+				return ONI_STATUS_OK;
+			}
+			else
 			{
 				printf("Unexpected size: %d != %d\n", *pDataSize, sizeof(OniVideoMode));
 				return ONI_STATUS_ERROR;
 			}
-			return GetVideoMode((OniVideoMode*)data);
 		}
 
 		return ONI_STATUS_NOT_IMPLEMENTED;
@@ -100,12 +94,26 @@ public:
 	{
 		if (propertyId == ONI_STREAM_PROPERTY_VIDEO_MODE)
 		{
-			if (dataSize != sizeof(OniVideoMode))
+			if (dataSize == sizeof(OniVideoMode))
+			{
+				OniVideoMode& rMode = *(OniVideoMode*)data;
+				if( m_Camera.set( CV_CAP_PROP_FRAME_WIDTH, rMode.resolutionX ) &&
+					m_Camera.set( CV_CAP_PROP_FRAME_HEIGHT, rMode.resolutionY ) &&
+					m_Camera.set( CV_CAP_PROP_FPS, rMode.fps ) )
+				{
+					UpdateVideoMode();
+					return ONI_STATUS_OK;
+				}
+				else
+				{
+					return ONI_STATUS_ERROR;
+				}
+			}
+			else
 			{
 				printf("Unexpected size: %d != %d\n", dataSize, sizeof(OniVideoMode));
 				return ONI_STATUS_ERROR;
 			}
-			return SetVideoMode((OniVideoMode*)data);
 		}
 
 		return ONI_STATUS_NOT_IMPLEMENTED;
@@ -176,7 +184,7 @@ protected:
 				rFrame.croppingEnabled	= FALSE;
 				rFrame.sensorType		= ONI_SENSOR_COLOR;
 				rFrame.stride			= m_uStride;
-				rFrame.timestamp		= uint64_t( m_Camera.get( CV_CAP_PROP_POS_MSEC ) );
+				rFrame.timestamp		= m_iFrameId * 3300;
 
 				// create reference counter
 				pFrame->pDriverCookie = xnOSMalloc( sizeof( int ) );
