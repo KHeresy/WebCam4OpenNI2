@@ -199,7 +199,7 @@ protected:
 			if( rFrame.data != NULL )
 			{
 				// copy data from cv::Mat to OniDriverFrame
-				rFrame.dataSize = m_uDataSize;
+				rFrame.dataSize = int(m_uDataSize);
 				memcpy( rFrame.data, m_FrameRBG.data, m_uDataSize );
 
 				// update metadata
@@ -210,7 +210,7 @@ protected:
 				rFrame.cropOriginX		= rFrame.cropOriginY = 0;
 				rFrame.croppingEnabled	= FALSE;
 				rFrame.sensorType		= ONI_SENSOR_COLOR;
-				rFrame.stride			= m_uStride;
+				rFrame.stride			= int(m_uStride);
 				rFrame.timestamp		= m_iFrameId * 3300;
 
 				// create reference counter
@@ -296,7 +296,7 @@ public:
 
 			mCamera.release();
 
-			m_sensors[0].numSupportedVideoModes = vSupportedMode.size();
+			m_sensors[0].numSupportedVideoModes = int(vSupportedMode.size());
 			m_sensors[0].pSupportedVideoModes = XN_NEW_ARR(OniVideoMode, vSupportedMode.size());
 			int	iIdx = 0;
 			for( auto itMode = vSupportedMode.begin(); itMode != vSupportedMode.end(); ++ itMode )
