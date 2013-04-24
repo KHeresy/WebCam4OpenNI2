@@ -109,7 +109,7 @@
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>..\..\..\..\opencv\build\x86\vc11\staticlib;$(SolutionDir)Bin\$(Platform)-$(Configuration)\</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>..\..\..\..\opencv\build\x64\vc11\lib;$(SolutionDir)Bin\$(Platform)-$(Configuration)\</AdditionalLibraryDirectories>
       <AdditionalDependencies>opencv_core245d.lib;opencv_highgui245d.lib;opencv_imgproc245d.lib;XnLib.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
@@ -119,7 +119,7 @@
       <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>_MBCS;%(PreprocessorDefinitions);TestDevice2_EXPORT</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\..\Include;..\..\..\ThirdParty\PSCommon\XnLib\Include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\..\..\opencv\build\include\;..\..\..\Include;..\..\..\ThirdParty\PSCommon\XnLib\Include</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
@@ -134,8 +134,8 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>XnLib.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)Bin\$(Platform)-$(Configuration)\</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_core245.lib;opencv_highgui245.lib;opencv_imgproc245.lib;XnLib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\..\..\opencv\build\x86\vc11\lib;$(SolutionDir)Bin\$(Platform)-$(Configuration)\</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -144,7 +144,7 @@
       <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>_MBCS;%(PreprocessorDefinitions);TestDevice2_EXPORT</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\..\Include;..\..\..\ThirdParty\PSCommon\XnLib\Include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\..\..\opencv\build\include\;..\..\..\Include;..\..\..\ThirdParty\PSCommon\XnLib\Include</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
@@ -159,8 +159,8 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>XnLib.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)Bin\$(Platform)-$(Configuration)\</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_core245.lib;opencv_highgui245.lib;opencv_imgproc245.lib;XnLib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\..\..\opencv\build\x64\vc11\lib;$(SolutionDir)Bin\$(Platform)-$(Configuration)\</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
