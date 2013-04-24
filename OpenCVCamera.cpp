@@ -30,6 +30,22 @@ inline OniVideoMode BuildMode( int W, int H, int FPS )
 	return mMode;
 }
 
+std::istream& operator>>( std::istream& rIS, OniVideoMode& rMode )
+{
+	std::string sValue;
+	rIS >> sValue;
+
+	size_t	uPos1 = sValue.find_first_of( "/" ),
+			uPos2 = sValue.find_first_of( "@" );
+	if( uPos1 != std::string::npos && uPos2 != std::string::npos )
+	{
+		std::stringstream( sValue.substr( 0, uPos1 ) ) >> rMode.resolutionX;
+		std::stringstream( sValue.substr( uPos1 + 1, uPos2 - uPos1 ) ) >> rMode.resolutionY;
+		std::stringstream( sValue.substr( uPos2 + 1 ) ) >> rMode.fps;
+	}
+	return rIS;
+}
+
 /**
  * Comparsion of OniVideoMode, used for std::set<>
  */
@@ -370,42 +386,54 @@ public:
 		m_sVendorName	= "OpenCV Camera by Heresy";
 
 		// try to open setting files
-		std::ifstream fileSetting( "OpenCVCamera.ini" );
-		if( fileSetting.is_open() )
+		try
 		{
-			std::string sLine;
-			while( std::getline( fileSetting, sLine ) )
+			std::ifstream fileSetting( "OpenCVCamera.ini" );
+			if( fileSetting.is_open() )
 			{
-				if( sLine.size() < 5 || sLine[0] == ';' )
-					continue;
-
-				size_t uPos = sLine.find_first_of( '=' );
-				if( uPos != std::string::npos )
+				std::string sLine;
+				while( std::getline( fileSetting, sLine ) )
 				{
-					std::string sName	= sLine.substr( 0, uPos );
-					std::string sValue	= sLine.substr( uPos+1 ); 
-					if( sName == "device_name" )
+					if( sLine.size() < 5 || sLine[0] == ';' )
+						continue;
+	
+					size_t uPos = sLine.find_first_of( '=' );
+					if( uPos != std::string::npos )
 					{
-						m_sDeviceName = sValue;
-					}
-					else if( sName == "list_device" )
-					{
-						if( sValue == "0" )
-							m_bListDevice = false;
-					}
-					else if( sName == "max_device_num" )
-					{
-						std::stringstream(sValue) >> m_iMaxTestNum;
+						std::string sName	= sLine.substr( 0, uPos );
+						std::string sValue	= sLine.substr( uPos+1 ); 
+						if( sName == "device_name" )
+						{
+							m_sDeviceName = sValue;
+						}
+						else if( sName == "list_device" )
+						{
+							if( sValue == "0" )
+								m_bListDevice = false;
+						}
+						else if( sName == "max_device_num" )
+						{
+							std::stringstream(sValue) >> m_iMaxTestNum;
+						}
+						else if( sName == "test_mode" )
+						{
+							OniVideoMode mMode;
+							std::stringstream(sValue) >> mMode;
+							m_vModeToTest.push_back( mMode );
+						}
 					}
 				}
+				fileSetting.close();
 			}
-			fileSetting.close();
+			else
+			{
+				m_vModeToTest.push_back( BuildMode( 320, 240, 30 ) );
+				m_vModeToTest.push_back( BuildMode( 640, 480, 30 ) );
+			}
 		}
-		else
+		catch( std::exception e )
 		{
-			m_vModeToTest.push_back( BuildMode( 720, 480, 30 ) );
-			m_vModeToTest.push_back( BuildMode( 640, 480, 30 ) );
-			m_vModeToTest.push_back( BuildMode( 320, 240, 30 ) );
+			e.what();
 		}
 	}
 
