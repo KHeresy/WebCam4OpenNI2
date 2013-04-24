@@ -1,5 +1,6 @@
 // STL Header
 #include <array>
+#include <fstream>
 #include <map>
 #include <vector>
 #include <set>
@@ -362,14 +363,50 @@ class OpenCV_Camera_Driver : public oni::driver::DriverBase
 public:
 	OpenCV_Camera_Driver(OniDriverServices* pDriverServices) : DriverBase(pDriverServices)
 	{
+		// default values
 		m_bListDevice	= true;
 		m_iMaxTestNum	= 10;
 		m_sDeviceName	= "\\OpenCV\\Camera\\";
 		m_sVendorName	= "OpenCV Camera by Heresy";
 
-		m_vModeToTest.push_back( BuildMode( 720, 480, 30 ) );
-		m_vModeToTest.push_back( BuildMode( 640, 480, 30 ) );
-		m_vModeToTest.push_back( BuildMode( 320, 240, 30 ) );
+		// try to open setting files
+		std::ifstream fileSetting( "OpenCVCamera.ini" );
+		if( fileSetting.is_open() )
+		{
+			std::string sLine;
+			while( std::getline( fileSetting, sLine ) )
+			{
+				if( sLine.size() < 5 || sLine[0] == ';' )
+					continue;
+
+				size_t uPos = sLine.find_first_of( '=' );
+				if( uPos != std::string::npos )
+				{
+					std::string sName	= sLine.substr( 0, uPos );
+					std::string sValue	= sLine.substr( uPos+1 ); 
+					if( sName == "device_name" )
+					{
+						m_sDeviceName = sValue;
+					}
+					else if( sName == "list_device" )
+					{
+						if( sValue == "0" )
+							m_bListDevice = false;
+					}
+					else if( sName == "max_device_num" )
+					{
+						std::stringstream(sValue) >> m_iMaxTestNum;
+					}
+				}
+			}
+			fileSetting.close();
+		}
+		else
+		{
+			m_vModeToTest.push_back( BuildMode( 720, 480, 30 ) );
+			m_vModeToTest.push_back( BuildMode( 640, 480, 30 ) );
+			m_vModeToTest.push_back( BuildMode( 320, 240, 30 ) );
+		}
 	}
 
 	OniStatus initialize(	oni::driver::DeviceConnectedCallback connectedCallback,
@@ -439,7 +476,7 @@ public:
 
 	virtual void deviceClose(oni::driver::DeviceBase* pDevice)
 	{
-		for( std::map<OniDeviceInfo*, oni::driver::DeviceBase*>::iterator iter = m_devices.begin(); iter != m_devices.end(); ++iter)
+		for( std::map<OniDeviceInfo*, oni::driver::DeviceBase*>::iterator iter = m_devices.begin(); iter != m_devices.end(); ++iter )
 		{
 			if (iter->second == pDevice)
 			{
@@ -453,7 +490,7 @@ public:
 
 	virtual OniStatus tryDevice(const char* uri)
 	{
-		for( std::map<OniDeviceInfo*, oni::driver::DeviceBase*>::iterator iter = m_devices.begin(); iter != m_devices.end(); ++iter)
+		for( std::map<OniDeviceInfo*, oni::driver::DeviceBase*>::iterator iter = m_devices.begin(); iter != m_devices.end(); ++iter )
 		{
 			if (xnOSStrCmp(iter->first->uri, uri) == 0)
 			{
