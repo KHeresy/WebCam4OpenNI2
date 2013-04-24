@@ -1,5 +1,6 @@
 // STL Header
 #include <array>
+#include <map>
 #include <vector>
 #include <set>
 #include <sstream>
@@ -15,6 +16,9 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
+/**
+ * Function to create a OniVideoMode object faster
+ */
 inline OniVideoMode BuildMode( int W, int H, int FPS )
 {
 	OniVideoMode mMode;
@@ -25,6 +29,9 @@ inline OniVideoMode BuildMode( int W, int H, int FPS )
 	return mMode;
 }
 
+/**
+ * Comparsion of OniVideoMode, used for std::set<>
+ */
 bool operator<( const OniVideoMode& m1, const OniVideoMode& m2 )
 {
 	if( m1.resolutionX < m2.resolutionX )
@@ -45,6 +52,9 @@ bool operator<( const OniVideoMode& m1, const OniVideoMode& m2 )
 	return false;
 }
 
+/**
+ * Color Sensor VideoStream
+ */
 class OpenCV_Color_Stream : public oni::driver::StreamBase
 {
 public:
@@ -386,7 +396,8 @@ public:
 					xnOSStrCopy( pInfo->name, sText.c_str(), ONI_MAX_STR);
 					xnOSStrCopy( pInfo->uri, sText.c_str(), ONI_MAX_STR);
 					pInfo->usbProductId = uint16_t( iCounter );
-					m_devices[pInfo] = NULL;
+
+					m_devices.insert( std::make_pair( pInfo, (oni::driver::DeviceBase*)NULL ) );
 					if( m_bListDevice )
 					{
 						deviceConnected(pInfo);
@@ -405,19 +416,19 @@ public:
 
 	virtual oni::driver::DeviceBase* deviceOpen(const char* uri)
 	{
-		for (xnl::Hash<OniDeviceInfo*, oni::driver::DeviceBase*>::Iterator iter = m_devices.Begin(); iter != m_devices.End(); ++iter)
+		for( std::map<OniDeviceInfo*, oni::driver::DeviceBase*>::iterator iter = m_devices.begin(); iter != m_devices.end(); ++iter)
 		{
-			if (xnOSStrCmp(iter->Key()->uri, uri) == 0)
+			if (xnOSStrCmp(iter->first->uri, uri) == 0)
 			{
 				// Found
-				if (iter->Value() != NULL)
+				if (iter->second != NULL)
 				{
 					// already using
-					return iter->Value();
+					return iter->second;
 				}
 
-				OpenCV_Camera_Device* pDevice = XN_NEW(OpenCV_Camera_Device, iter->Key(), m_vModeToTest, getServices());
-				iter->Value() = pDevice;
+				OpenCV_Camera_Device* pDevice = XN_NEW(OpenCV_Camera_Device, iter->first, m_vModeToTest, getServices());
+				iter->second = pDevice;
 				return pDevice;
 			}
 		}
@@ -428,11 +439,11 @@ public:
 
 	virtual void deviceClose(oni::driver::DeviceBase* pDevice)
 	{
-		for (xnl::Hash<OniDeviceInfo*, oni::driver::DeviceBase*>::Iterator iter = m_devices.Begin(); iter != m_devices.End(); ++iter)
+		for( std::map<OniDeviceInfo*, oni::driver::DeviceBase*>::iterator iter = m_devices.begin(); iter != m_devices.end(); ++iter)
 		{
-			if (iter->Value() == pDevice)
+			if (iter->second == pDevice)
 			{
-				iter->Value() = NULL;
+				iter->second = NULL;
 				XN_DELETE(pDevice);
 				return;
 			}
@@ -442,14 +453,14 @@ public:
 
 	virtual OniStatus tryDevice(const char* uri)
 	{
-		for (xnl::Hash<OniDeviceInfo*, oni::driver::DeviceBase*>::Iterator iter = m_devices.Begin(); iter != m_devices.End(); ++iter)
+		for( std::map<OniDeviceInfo*, oni::driver::DeviceBase*>::iterator iter = m_devices.begin(); iter != m_devices.end(); ++iter)
 		{
-			if (xnOSStrCmp(iter->Key()->uri, uri) == 0)
+			if (xnOSStrCmp(iter->first->uri, uri) == 0)
 			{
 				// Found
-				if (iter->Value() == NULL)
+				if (iter->second == NULL)
 				{
-					deviceConnected( iter->Key() );
+					deviceConnected( iter->first );
 				}
 
 				return ONI_STATUS_OK;
@@ -466,7 +477,7 @@ protected:
 	std::string	m_sDeviceName;
 	std::string	m_sVendorName;
 	std::vector<OniVideoMode>	m_vModeToTest;
-	xnl::Hash<OniDeviceInfo*, oni::driver::DeviceBase*> m_devices;
+	std::map<OniDeviceInfo*, oni::driver::DeviceBase*> m_devices;
 };
 
 ONI_EXPORT_DRIVER(OpenCV_Camera_Driver);
