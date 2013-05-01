@@ -290,7 +290,12 @@ public:
 					mCamera.set( CV_CAP_PROP_FRAME_HEIGHT, itMode->resolutionY ) &&
 					mCamera.set( CV_CAP_PROP_FPS, itMode->fps ) )
 				{
-					vSupportedMode.insert( *itMode );
+					if( itMode->resolutionX == int( mCamera.get( CV_CAP_PROP_FRAME_WIDTH ) ) &&
+						itMode->resolutionY == int( mCamera.get( CV_CAP_PROP_FRAME_HEIGHT ) ) &&
+						itMode->fps == int( mCamera.get( CV_CAP_PROP_FPS ) ) )
+					{
+						vSupportedMode.insert( *itMode );
+					}
 				}
 			}
 
