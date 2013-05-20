@@ -166,11 +166,6 @@
   <ItemGroup>
     <ClCompile Include="OpenCVCamera.cpp" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\ThirdParty\PSCommon\XnLib\Source\XnLib.vcxproj">
-      <Project>{72d595bb-8c52-449b-91db-0e9f6aeaf5bb}</Project>
-    </ProjectReference>
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

@@ -1,3 +1,6 @@
+// C Header
+#include <string.h>
+
 // STL Header
 #include <array>
 #include <fstream>
@@ -5,6 +8,7 @@
 #include <vector>
 #include <set>
 #include <sstream>
+#include <thread>
 
 // OpenNI Header
 #include "Driver/OniDriverAPI.h"
@@ -75,7 +79,8 @@ class OpenCV_Color_Stream : public oni::driver::StreamBase
 public:
 	OpenCV_Color_Stream( int iDeviceId ) : oni::driver::StreamBase()
 	{
-		m_iFrameId = 0;
+		m_iFrameId	= 0;
+		m_pThread	= NULL;
 		m_Camera.open(iDeviceId);
 		UpdateVideoMode();
 	}
@@ -87,13 +92,19 @@ public:
 
 	OniStatus start()
 	{
-		xnOSCreateThread(threadFunc, this, &m_threadHandle);
+		m_pThread = new std::thread( threadFunc, this );
 		return ONI_STATUS_OK;
 	}
 
 	void stop()
 	{
 		m_bRunning = false;
+		if( m_pThread != NULL )
+		{
+			m_pThread->join();
+			delete m_pThread;
+			m_pThread = NULL;
+		}
 	}
 
 	OniStatus getProperty(int propertyId, void* data, int* pDataSize)
@@ -153,26 +164,23 @@ public:
 	{
 		if (0 == --(*((int*)pFrame->pDriverCookie)) )
 		{
-			xnOSFree(pFrame->pDriverCookie);
-			xnOSFreeAligned(pFrame->frame.data);
-			xnOSFree(pFrame);
+			delete pFrame->pDriverCookie;
+			delete [] pFrame->frame.data;
+			delete pFrame;
 		}
 	}
 
 protected:
 
 	// Thread
-	static XN_THREAD_PROC threadFunc(XN_THREAD_PARAM pThreadParam)
+	static void threadFunc( OpenCV_Color_Stream* pStream )
 	{
-		OpenCV_Color_Stream* pStream = (OpenCV_Color_Stream*)pThreadParam;
 		pStream->m_bRunning = true;
 
 		while( pStream->m_bRunning )
 		{
 			pStream->UpdateData();
 		}
-
-		XN_THREAD_PROC_RETURN(XN_STATUS_OK);
 	}
 
 	void UpdateData()
@@ -188,12 +196,12 @@ protected:
 
 		#pragma region Build OniDriverFrame
 		// create frame
-		OniDriverFrame* pFrame = (OniDriverFrame*)xnOSCalloc( 1, sizeof( OniDriverFrame ) );
+		OniDriverFrame* pFrame = new OniDriverFrame();
 		if( pFrame != NULL )
 		{
 			// create the buffer of image
 			OniFrame& rFrame = pFrame->frame;
-			rFrame.data = xnOSMallocAligned( m_uDataSize, XN_DEFAULT_MEM_ALIGN );
+			rFrame.data = new unsigned char[m_uDataSize];
 			if( rFrame.data != NULL )
 			{
 				// copy data from cv::Mat to OniDriverFrame
@@ -212,7 +220,7 @@ protected:
 				rFrame.timestamp		= m_iFrameId * 3300;
 
 				// create reference counter
-				pFrame->pDriverCookie = xnOSMalloc( sizeof( int ) );
+				pFrame->pDriverCookie = new int();
 				*((int*)pFrame->pDriverCookie) = 1;
 
 				// raise new frame
@@ -249,7 +257,7 @@ protected:
 	size_t	m_uDataSize;
 	size_t	m_uStride;
 
-	XN_THREAD_HANDLE		m_threadHandle;
+	std::thread*			m_pThread;
 	cv::VideoCapture		m_Camera;
 	cv::Mat					m_FrameRBG;
 	OniVideoMode			m_VideoMode;
@@ -454,13 +462,13 @@ public:
 					mCamera.release();
 
 					std::stringstream ss;
-					ss << m_sDeviceName << ( iCounter + 1 );
+					ss << m_sDeviceName << ( iCounter );
 					std::string sText = ss.str();
 
 					OniDeviceInfo* pInfo = new OniDeviceInfo();
-					xnOSStrCopy( pInfo->vendor, m_sVendorName.c_str(), ONI_MAX_STR);
-					xnOSStrCopy( pInfo->name, sText.c_str(), ONI_MAX_STR);
-					xnOSStrCopy( pInfo->uri, sText.c_str(), ONI_MAX_STR);
+					strncpy( pInfo->vendor,	m_sVendorName.c_str(),	ONI_MAX_STR );
+					strncpy( pInfo->name,	sText.c_str(),			ONI_MAX_STR );
+					strncpy( pInfo->uri,	sText.c_str(),			ONI_MAX_STR );
 					pInfo->usbProductId = uint16_t( iCounter );
 
 					m_devices.insert( std::make_pair( pInfo, (oni::driver::DeviceBase*)NULL ) );
@@ -484,7 +492,7 @@ public:
 	{
 		for( std::map<OniDeviceInfo*, oni::driver::DeviceBase*>::iterator iter = m_devices.begin(); iter != m_devices.end(); ++iter)
 		{
-			if (xnOSStrCmp(iter->first->uri, uri) == 0)
+			if( strcmp(iter->first->uri, uri) == 0 )
 			{
 				// Found
 				if (iter->second != NULL)
@@ -520,7 +528,7 @@ public:
 	{
 		for( std::map<OniDeviceInfo*, oni::driver::DeviceBase*>::iterator iter = m_devices.begin(); iter != m_devices.end(); ++iter )
 		{
-			if (xnOSStrCmp(iter->first->uri, uri) == 0)
+			if( strcmp( iter->first->uri, uri ) == 0 )
 			{
 				// Found
 				if (iter->second == NULL)
