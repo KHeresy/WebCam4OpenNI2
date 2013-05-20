@@ -298,7 +298,7 @@ public:
 			mCamera.release();
 
 			m_sensors[0].numSupportedVideoModes = int(vSupportedMode.size());
-			m_sensors[0].pSupportedVideoModes = XN_NEW_ARR(OniVideoMode, vSupportedMode.size());
+			m_sensors[0].pSupportedVideoModes = new OniVideoMode[ vSupportedMode.size() ];
 			int	iIdx = 0;
 			for( auto itMode = vSupportedMode.begin(); itMode != vSupportedMode.end(); ++ itMode )
 			{
@@ -326,7 +326,7 @@ public:
 	{
 		if (sensorType == ONI_SENSOR_COLOR)
 		{
-			OpenCV_Color_Stream* pImage = XN_NEW( OpenCV_Color_Stream, m_pInfo->usbProductId );
+			OpenCV_Color_Stream* pImage = new OpenCV_Color_Stream( m_pInfo->usbProductId );
 			return pImage;
 		}
 
@@ -336,7 +336,7 @@ public:
 
 	void destroyStream(oni::driver::StreamBase* pStream)
 	{
-		XN_DELETE(pStream);
+		delete pStream;
 	}
 
 	OniStatus  getProperty(int propertyId, void* data, int* pDataSize)
@@ -457,7 +457,7 @@ public:
 					ss << m_sDeviceName << ( iCounter + 1 );
 					std::string sText = ss.str();
 
-					OniDeviceInfo* pInfo = XN_NEW(OniDeviceInfo);
+					OniDeviceInfo* pInfo = new OniDeviceInfo();
 					xnOSStrCopy( pInfo->vendor, m_sVendorName.c_str(), ONI_MAX_STR);
 					xnOSStrCopy( pInfo->name, sText.c_str(), ONI_MAX_STR);
 					xnOSStrCopy( pInfo->uri, sText.c_str(), ONI_MAX_STR);
@@ -493,7 +493,7 @@ public:
 					return iter->second;
 				}
 
-				OpenCV_Camera_Device* pDevice = XN_NEW(OpenCV_Camera_Device, iter->first, m_vModeToTest, getServices());
+				OpenCV_Camera_Device* pDevice = new OpenCV_Camera_Device( iter->first, m_vModeToTest, getServices() );
 				iter->second = pDevice;
 				return pDevice;
 			}
@@ -510,7 +510,7 @@ public:
 			if (iter->second == pDevice)
 			{
 				iter->second = NULL;
-				XN_DELETE(pDevice);
+				delete pDevice;
 				return;
 			}
 		}
