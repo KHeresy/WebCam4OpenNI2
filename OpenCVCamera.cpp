@@ -9,8 +9,6 @@
 // OpenNI Header
 #include "Driver/OniDriverAPI.h"
 #include "XnLib.h"
-#include "XnHash.h"
-#include "XnEvent.h"
 
 // OpenCV Header
 #include <opencv2/core/core.hpp>
@@ -222,13 +220,11 @@ protected:
 			}
 			else
 			{
-				XN_ASSERT(FALSE);
 				return;
 			}
 		}
 		else
 		{
-			XN_ASSERT( FALSE );
 			return;
 		}
 		#pragma endregion
@@ -518,7 +514,6 @@ public:
 				return;
 			}
 		}
-		XN_ASSERT(FALSE);
 	}
 
 	virtual OniStatus tryDevice(const char* uri)
