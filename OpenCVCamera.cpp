@@ -92,8 +92,13 @@ public:
 
 	OniStatus start()
 	{
-		m_pThread = new std::thread( threadFunc, this );
-		return ONI_STATUS_OK;
+		if( m_Camera.isOpened() )
+		{
+			m_pThread = new std::thread( threadFunc, this );
+			return ONI_STATUS_OK;
+		}
+		else
+			return ONI_STATUS_ERROR;
 	}
 
 	void stop()
@@ -268,6 +273,7 @@ class OpenCV_Camera_Device : public oni::driver::DeviceBase
 public:
 	OpenCV_Camera_Device(OniDeviceInfo* pInfo, const std::vector<OniVideoMode>& rTestMode, oni::driver::DriverServices& driverServices ) : m_pInfo(pInfo), m_driverServices(driverServices)
 	{
+		m_bCreated = false;
 		m_sensors[0].sensorType = ONI_SENSOR_COLOR;
 
 		std::set<OniVideoMode> vSupportedMode;
@@ -314,6 +320,7 @@ public:
 				m_sensors[0].pSupportedVideoModes[iIdx].pixelFormat = ONI_PIXEL_FORMAT_RGB888;
 				++ iIdx;
 			}
+			m_bCreated = true;
 		}
 	}
 
@@ -374,10 +381,16 @@ public:
 		return rc;
 	}
 
+	bool Created() const
+	{
+		return m_bCreated;
+	}
+
 private:
 	OpenCV_Camera_Device(const OpenCV_Camera_Device&);
 	void operator=(const OpenCV_Camera_Device&);
 
+	bool m_bCreated;
 	OniDeviceInfo* m_pInfo;
 	OniSensorInfo m_sensors[1];
 	oni::driver::DriverServices& m_driverServices;
@@ -502,8 +515,11 @@ public:
 				}
 
 				OpenCV_Camera_Device* pDevice = new OpenCV_Camera_Device( iter->first, m_vModeToTest, getServices() );
-				iter->second = pDevice;
-				return pDevice;
+				if( pDevice->Created() )
+				{
+					iter->second = pDevice;
+					return pDevice;
+				}
 			}
 		}
 
