@@ -83,7 +83,7 @@ public:
 	/**
 	 * Constructor
 	 */
-	OpenCV_Color_Stream( int iDeviceId ) : oni::driver::StreamBase()
+	OpenCV_Color_Stream( int iDeviceId, oni::driver::DriverServices& driverServices ) : oni::driver::StreamBase(), m_driverServices(driverServices)
 	{
 		m_iFrameId		= 0;
 		m_bMirroring	= false;
@@ -157,7 +157,7 @@ public:
 			}
 			else
 			{
-				printf("Unexpected size: %d != %d\n", *pDataSize, sizeof(OniVideoMode));
+				m_driverServices.errorLoggerAppend( "Unexpected size: %d != %d\n", *pDataSize, sizeof(OniVideoMode) );
 				return ONI_STATUS_ERROR;
 			}
 			break;
@@ -170,7 +170,7 @@ public:
 			}
 			else
 			{
-				printf("Unexpected size: %d != %d\n", *pDataSize, sizeof(OniBool));
+				m_driverServices.errorLoggerAppend( "Unexpected size: %d != %d\n", *pDataSize, sizeof(OniBool) );
 				return ONI_STATUS_ERROR;
 			}
 			break;
@@ -205,7 +205,7 @@ public:
 			}
 			else
 			{
-				printf("Unexpected size: %d != %d\n", dataSize, sizeof(OniVideoMode));
+				m_driverServices.errorLoggerAppend( "Unexpected size: %d != %d\n", dataSize, sizeof(OniVideoMode) );
 				return ONI_STATUS_ERROR;
 			}
 			break;
@@ -218,7 +218,7 @@ public:
 			}
 			else
 			{
-				printf("Unexpected size: %d != %d\n", dataSize, sizeof(OniBool));
+				m_driverServices.errorLoggerAppend( "Unexpected size: %d != %d\n", dataSize, sizeof(OniBool) );
 				return ONI_STATUS_ERROR;
 			}
 			break;
@@ -269,7 +269,7 @@ protected:
 	{
 		#pragma region OpenCV Code
 		// get new image
-		cv::Mat mImg;
+		cv::Mat mImg, m_FrameRBG;
 		m_Camera >> mImg;
 
 		// convert image form BGR to RGB
@@ -341,10 +341,11 @@ protected:
 	size_t	m_uDataSize;
 	size_t	m_uStride;
 
-	std::thread*			m_pThread;
-	cv::VideoCapture		m_Camera;
-	cv::Mat					m_FrameRBG;
-	OniVideoMode			m_VideoMode;
+	std::thread*		m_pThread;
+	cv::VideoCapture	m_Camera;
+	OniVideoMode		m_VideoMode;
+
+	oni::driver::DriverServices&	m_driverServices;
 };
 
 /**
@@ -439,7 +440,7 @@ public:
 	{
 		if (sensorType == ONI_SENSOR_COLOR)
 		{
-			OpenCV_Color_Stream* pImage = new OpenCV_Color_Stream( m_pInfo->usbProductId );
+			OpenCV_Color_Stream* pImage = new OpenCV_Color_Stream( m_pInfo->usbProductId, m_driverServices );
 			return pImage;
 		}
 
@@ -514,7 +515,7 @@ public:
 	/**
 	 * Constructor
 	 */
-	OpenCV_Camera_Driver(OniDriverServices* pDriverServices) : DriverBase(pDriverServices)
+	OpenCV_Camera_Driver( OniDriverServices* pDriverServices ) : DriverBase( pDriverServices )
 	{
 		// default values
 		m_bListDevice	= true;
@@ -622,7 +623,7 @@ public:
 	/**
 	 * Open device
 	 */
-	oni::driver::DeviceBase* deviceOpen(const char* uri)
+	oni::driver::DeviceBase* deviceOpen( const char* uri )
 	{
 		std::string sUri = uri;
 
