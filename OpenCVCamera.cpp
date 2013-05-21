@@ -306,6 +306,7 @@ class OpenCV_Camera_Device : public oni::driver::DeviceBase
 public:
 	OpenCV_Camera_Device(OniDeviceInfo* pInfo, const std::vector<OniVideoMode>& rTestMode, oni::driver::DriverServices& driverServices ) : m_pInfo(pInfo), m_driverServices(driverServices)
 	{
+		m_bCreated = false;
 		m_sensors[0].sensorType = ONI_SENSOR_COLOR;
 
 		std::set<OniVideoMode> vSupportedMode;
@@ -352,6 +353,8 @@ public:
 				m_sensors[0].pSupportedVideoModes[iIdx].pixelFormat = ONI_PIXEL_FORMAT_RGB888;
 				++ iIdx;
 			}
+
+			m_bCreated = true;
 		}
 	}
 
@@ -412,12 +415,18 @@ public:
 		return rc;
 	}
 
+	bool Created() const
+	{
+		return m_bCreated;
+	}
+
 private:
 	OpenCV_Camera_Device(const OpenCV_Camera_Device&);
 	void operator=(const OpenCV_Camera_Device&);
 
-	OniDeviceInfo* m_pInfo;
-	OniSensorInfo m_sensors[1];
+	bool			m_bCreated;
+	OniDeviceInfo*	m_pInfo;
+	OniSensorInfo	m_sensors[1];
 	oni::driver::DriverServices& m_driverServices;
 };
 
@@ -491,35 +500,29 @@ public:
 	{
 		if( oni::driver::DriverBase::initialize(connectedCallback, disconnectedCallback, deviceStateChangedCallback, pCookie) == ONI_STATUS_OK )
 		{
-			int iCounter = 0;
-			while( iCounter < m_iMaxTestNum )
+			if( m_bListDevice )
 			{
-				cv::VideoCapture mCamera( iCounter );
-				if( mCamera.isOpened() )
+				int iCounter = 0;
+				while( iCounter < m_iMaxTestNum )
 				{
-					mCamera.release();
-
-					std::stringstream ss;
-					ss << m_sDeviceName << ( iCounter );
-					std::string sText = ss.str();
-
-					OniDeviceInfo* pInfo = new OniDeviceInfo();
-					strncpy( pInfo->vendor,	m_sVendorName.c_str(),	ONI_MAX_STR );
-					strncpy( pInfo->name,	sText.c_str(),			ONI_MAX_STR );
-					strncpy( pInfo->uri,	sText.c_str(),			ONI_MAX_STR );
-					pInfo->usbProductId = uint16_t( iCounter );
-
-					m_devices.insert( std::make_pair( pInfo, (oni::driver::DeviceBase*)NULL ) );
-					if( m_bListDevice )
+					cv::VideoCapture mCamera( iCounter );
+					if( mCamera.isOpened() )
 					{
-						deviceConnected(pInfo);
-						deviceStateChanged(pInfo, 0);
+						mCamera.release();
+
+						// construct URI
+						std::stringstream ss;
+						ss << m_sDeviceName << ( iCounter );
+
+						// create device info
+						CreateDeviceInfo( ss.str(), iCounter );
+
+						++iCounter;
 					}
-					++iCounter;
-				}
-				else
-				{
-					break;
+					else
+					{
+						break;
+					}
 				}
 			}
 		}
@@ -528,67 +531,120 @@ public:
 
 	virtual oni::driver::DeviceBase* deviceOpen(const char* uri)
 	{
-		for( std::map<OniDeviceInfo*, oni::driver::DeviceBase*>::iterator iter = m_devices.begin(); iter != m_devices.end(); ++iter)
-		{
-			if( strcmp(iter->first->uri, uri) == 0 )
-			{
-				// Found
-				if (iter->second != NULL)
-				{
-					// already using
-					return iter->second;
-				}
+		std::string sUri = uri;
 
-				OpenCV_Camera_Device* pDevice = new OpenCV_Camera_Device( iter->first, m_vModeToTest, getServices() );
-				iter->second = pDevice;
-				return pDevice;
+		// find if the device is already in the list
+		auto itDevice = m_mDevices.find( sUri );
+		if( itDevice != m_mDevices.end() )
+		{
+			auto& rDeviceData = itDevice->second;
+			if( rDeviceData.second == NULL )
+			{
+				// create device if not created
+				OpenCV_Camera_Device* pDevice = new OpenCV_Camera_Device( rDeviceData.first, m_vModeToTest, getServices() );
+				if( pDevice->Created() )
+				{
+					rDeviceData.second = pDevice;
+					return pDevice;
+				}
+				else
+				{
+					getServices().errorLoggerAppend( "Device '%s' create error", uri );
+					delete pDevice;
+					return NULL;
+				}
+			}
+			else
+			{
+				// use created device directly
+				return rDeviceData.second;
 			}
 		}
 
-		getServices().errorLoggerAppend("Looking for '%s'", uri);
+		getServices().errorLoggerAppend( "Looking for '%s'", uri );
 		return NULL;
 	}
 
-	virtual void deviceClose(oni::driver::DeviceBase* pDevice)
+	virtual void deviceClose( oni::driver::DeviceBase* pDevice )
 	{
-		for( std::map<OniDeviceInfo*, oni::driver::DeviceBase*>::iterator iter = m_devices.begin(); iter != m_devices.end(); ++iter )
+		for( auto itDevice = m_mDevices.begin(); itDevice != m_mDevices.end(); ++ itDevice )
 		{
-			if (iter->second == pDevice)
+			auto& rDeviceData = itDevice->second;
+			if( rDeviceData.second == pDevice )
 			{
-				iter->second = NULL;
+				rDeviceData.second = NULL;
 				delete pDevice;
 				return;
 			}
 		}
 	}
 
-	virtual OniStatus tryDevice(const char* uri)
+	virtual OniStatus tryDevice( const char* uri )
 	{
-		for( std::map<OniDeviceInfo*, oni::driver::DeviceBase*>::iterator iter = m_devices.begin(); iter != m_devices.end(); ++iter )
+		std::string sUri = uri;
+		auto itDevice = m_mDevices.find( sUri );
+		if( itDevice != m_mDevices.end() )
 		{
-			if( strcmp( iter->first->uri, uri ) == 0 )
+			return ONI_STATUS_OK;
+		}
+		else
+		{
+			// not found existed, and is not listed
+			if( !m_bListDevice )
 			{
-				// Found
-				if (iter->second == NULL)
+				// check if URI prefix is correct
+				if( sUri.substr( 0, m_sDeviceName.length() ) == m_sDeviceName )
 				{
-					deviceConnected( iter->first );
+					// get id
+					try
+					{
+						std::string sIdx = sUri.substr( m_sDeviceName.length() );
+						std::stringstream ss( sIdx );
+						uint16_t uIdx;
+						ss >> uIdx;
+						CreateDeviceInfo( sUri, uIdx );
+						return ONI_STATUS_OK;
+					}
+					catch( ... )
+					{
+						getServices().errorLoggerAppend( "given uri '%s' parsing error", uri );
+						return ONI_STATUS_ERROR;
+					}
 				}
-
-				return ONI_STATUS_OK;
 			}
 		}
+
 		return DriverBase::tryDevice(uri);
 	}
 
-	void shutdown() {}
+	void shutdown()
+	{
+
+	}
 
 protected:
-	bool		m_bListDevice;
-	int			m_iMaxTestNum;
-	std::string	m_sDeviceName;
-	std::string	m_sVendorName;
+	virtual void CreateDeviceInfo( const std::string& sUri, uint16_t idx )
+	{
+		// Construct OniDeviceInfo
+		OniDeviceInfo* pInfo = new OniDeviceInfo();
+		strncpy( pInfo->vendor,	m_sVendorName.c_str(),	ONI_MAX_STR );
+		strncpy( pInfo->name,	sUri.c_str(),			ONI_MAX_STR );
+		strncpy( pInfo->uri,		sUri.c_str(),			ONI_MAX_STR );
+		pInfo->usbProductId = uint16_t( idx );
+
+		// save device info
+		m_mDevices[sUri] = std::make_pair( pInfo, (oni::driver::DeviceBase*)NULL );
+		deviceConnected( pInfo );
+		deviceStateChanged( pInfo, 0 );
+	}
+
+protected:
+	bool						m_bListDevice;
+	int							m_iMaxTestNum;
+	std::string					m_sDeviceName;
+	std::string					m_sVendorName;
 	std::vector<OniVideoMode>	m_vModeToTest;
-	std::map<OniDeviceInfo*, oni::driver::DeviceBase*> m_devices;
+	std::map< std::string,std::pair<OniDeviceInfo*, oni::driver::DeviceBase*> > m_mDevices;
 };
 
 ONI_EXPORT_DRIVER(OpenCV_Camera_Driver);
