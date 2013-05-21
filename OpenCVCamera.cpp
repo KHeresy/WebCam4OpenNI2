@@ -358,6 +358,10 @@ public:
 		}
 	}
 
+	~OpenCV_Camera_Device()
+	{
+	}
+
 	OniDeviceInfo* GetInfo()
 	{
 		return m_pInfo;
@@ -619,7 +623,12 @@ public:
 
 	void shutdown()
 	{
-
+		for( auto itDevice = m_mDevices.begin(); itDevice != m_mDevices.end(); ++ itDevice )
+		{
+			auto& rDeviceData = itDevice->second;
+			delete rDeviceData.first;
+			delete rDeviceData.second;
+		}
 	}
 
 protected:
