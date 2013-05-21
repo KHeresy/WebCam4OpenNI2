@@ -227,27 +227,6 @@ public:
 			return ONI_STATUS_NOT_IMPLEMENTED;
 		}
 	}
-	
-	/**
-	 * image data reference counter addition
-	 */
-	void addRefToFrame(OniDriverFrame* pFrame)
-	{
-		++(*((int*)pFrame->pDriverCookie));
-	}
-
-	/**
-	 * image data reference counter subtraction
-	 */
-	void releaseFrame(OniDriverFrame* pFrame)
-	{
-		if( 0 == --(*((int*)pFrame->pDriverCookie)) )
-		{
-			delete pFrame->pDriverCookie;
-			delete [] pFrame->frame.data;
-			delete pFrame;
-		}
-	}
 
 protected:
 
@@ -282,32 +261,27 @@ protected:
 
 		#pragma region Build OniDriverFrame
 		// create frame
-		OniDriverFrame* pFrame = new OniDriverFrame();
+		OniFrame* pFrame = getServices().acquireFrame();
 		if( pFrame != NULL )
 		{
 			// create the buffer of image
-			OniFrame& rFrame = pFrame->frame;
-			rFrame.data = new unsigned char[m_uDataSize];
-			if( rFrame.data != NULL )
+			pFrame->data = new unsigned char[m_uDataSize];
+			if( pFrame->data != NULL )
 			{
 				// copy data from cv::Mat to OniDriverFrame
-				rFrame.dataSize = int(m_uDataSize);
-				memcpy( rFrame.data, m_FrameRBG.data, m_uDataSize );
+				pFrame->dataSize = int(m_uDataSize);
+				memcpy( pFrame->data, m_FrameRBG.data, m_uDataSize );
 
 				// update metadata
-				rFrame.frameIndex		= ++m_iFrameId;
-				rFrame.videoMode		= m_VideoMode;
-				rFrame.width			= mImg.cols;
-				rFrame.height			= mImg.rows;
-				rFrame.cropOriginX		= rFrame.cropOriginY = 0;
-				rFrame.croppingEnabled	= FALSE;
-				rFrame.sensorType		= ONI_SENSOR_COLOR;
-				rFrame.stride			= int(m_uStride);
-				rFrame.timestamp		= m_iFrameId * 3300;
-
-				// create reference counter
-				pFrame->pDriverCookie = new int();
-				*((int*)pFrame->pDriverCookie) = 1;
+				pFrame->frameIndex		= ++m_iFrameId;
+				pFrame->videoMode		= m_VideoMode;
+				pFrame->width			= mImg.cols;
+				pFrame->height			= mImg.rows;
+				pFrame->cropOriginX		= pFrame->cropOriginY = 0;
+				pFrame->croppingEnabled	= FALSE;
+				pFrame->sensorType		= ONI_SENSOR_COLOR;
+				pFrame->stride			= int(m_uStride);
+				pFrame->timestamp		= m_iFrameId * 3300;
 
 				// raise new frame
 				raiseNewFrame( pFrame );
@@ -346,6 +320,10 @@ protected:
 	OniVideoMode		m_VideoMode;
 
 	oni::driver::DriverServices&	m_driverServices;
+
+private:
+	OpenCV_Color_Stream( const OpenCV_Color_Stream& );
+	void operator=( const OpenCV_Color_Stream& );
 };
 
 /**
@@ -605,7 +583,7 @@ public:
 						ss << m_sDeviceName << ( iCounter );
 
 						// create device info
-						CreateDeviceInfo( ss.str(), iCounter );
+						CreateDeviceInfo( ss.str(), uint16_t(iCounter) );
 
 						++iCounter;
 					}
@@ -623,7 +601,7 @@ public:
 	/**
 	 * Open device
 	 */
-	oni::driver::DeviceBase* deviceOpen( const char* uri )
+	oni::driver::DeviceBase* deviceOpen( const char* uri, const char* /*mode*/ )
 	{
 		std::string sUri = uri;
 
