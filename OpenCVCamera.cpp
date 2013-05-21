@@ -226,11 +226,9 @@ protected:
 		// convert image form BGR to RGB
 		cv::cvtColor( mImg, m_FrameRBG, CV_BGR2RGB );
 
+		// mirror
 		if( m_bMirroring )
-		{
-			cv::flip( m_FrameRBG, mImg, 1 );
-			m_FrameRBG = mImg;
-		}
+			cv::flip( m_FrameRBG, m_FrameRBG, 1 );
 		#pragma endregion
 
 		#pragma region Build OniDriverFrame
