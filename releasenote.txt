@@ -1,4 +1,5 @@
 2013/05/2X V02 (working)
+ * Add mirror support
  * Use static library as default
  * Not using XnLib as possible (can't remove complete)
  * Add resolution test, not supported VideoMode will no longer in list
