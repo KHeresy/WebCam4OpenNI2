@@ -2,8 +2,8 @@
 #include <string.h>
 
 // STL Header
-#include <array>
 #include <fstream>
+#include <iostream>
 #include <map>
 #include <vector>
 #include <set>
@@ -32,6 +32,9 @@ inline OniVideoMode BuildMode( int W, int H, int FPS )
 	return mMode;
 }
 
+/**
+ * Build OniVideoMode from input stream, format: 320/240@30
+ */
 std::istream& operator>>( std::istream& rIS, OniVideoMode& rMode )
 {
 	std::string sValue;
@@ -77,26 +80,43 @@ bool operator<( const OniVideoMode& m1, const OniVideoMode& m2 )
 class OpenCV_Color_Stream : public oni::driver::StreamBase
 {
 public:
+	/**
+	 * Constructor
+	 */
 	OpenCV_Color_Stream( int iDeviceId ) : oni::driver::StreamBase()
 	{
 		m_iFrameId		= 0;
 		m_bMirroring	= false;
 		m_pThread		= NULL;
-		m_Camera.open(iDeviceId);
+		m_Camera.open( iDeviceId );
 		UpdateVideoMode();
 	}
 
+	/**
+	 * Destructor
+	 */
 	~OpenCV_Color_Stream()
 	{
 		stop();
 	}
 
+	/**
+	 * Start load image
+	 */
 	OniStatus start()
 	{
-		m_pThread = new std::thread( threadFunc, this );
-		return ONI_STATUS_OK;
+		if( m_Camera.isOpened() )
+		{
+			m_pThread = new std::thread( threadFunc, this );
+			return ONI_STATUS_OK;
+		}
+		std::cerr << "The OpenCV camera is not opened." << std::endl;
+		return ONI_STATUS_ERROR;
 	}
 
+	/**
+	 * Stop load image
+	 */
 	void stop()
 	{
 		m_bRunning = false;
@@ -108,7 +128,24 @@ public:
 		}
 	}
 
-	OniStatus getProperty(int propertyId, void* data, int* pDataSize)
+	/**
+	 * Check if the property is supported
+	 */
+	OniBool isPropertySupported( int propertyId )
+	{
+		switch( propertyId )
+		{
+			case ONI_STREAM_PROPERTY_VIDEO_MODE:
+			case ONI_STREAM_PROPERTY_MIRRORING:
+				return true;
+		}
+		return true;
+	}
+
+	/**
+	 * get property
+	 */
+	OniStatus getProperty( int propertyId, void* data, int* pDataSize )
 	{
 		switch( propertyId )
 		{
@@ -143,6 +180,9 @@ public:
 		}
 	}
 
+	/**
+	 * set property
+	 */
 	OniStatus setProperty(int propertyId, const void* data, int dataSize)
 	{
 		switch( propertyId )
@@ -188,14 +228,20 @@ public:
 		}
 	}
 	
+	/**
+	 * image data reference counter addition
+	 */
 	void addRefToFrame(OniDriverFrame* pFrame)
 	{
 		++(*((int*)pFrame->pDriverCookie));
 	}
 
+	/**
+	 * image data reference counter subtraction
+	 */
 	void releaseFrame(OniDriverFrame* pFrame)
 	{
-		if (0 == --(*((int*)pFrame->pDriverCookie)) )
+		if( 0 == --(*((int*)pFrame->pDriverCookie)) )
 		{
 			delete pFrame->pDriverCookie;
 			delete [] pFrame->frame.data;
@@ -205,7 +251,7 @@ public:
 
 protected:
 
-	// Thread
+	// Thread function to update image
 	static void threadFunc( OpenCV_Color_Stream* pStream )
 	{
 		pStream->m_bRunning = true;
@@ -216,6 +262,9 @@ protected:
 		}
 	}
 
+	/**
+	 * Update image
+	 */
 	void UpdateData()
 	{
 		#pragma region OpenCV Code
@@ -262,19 +311,16 @@ protected:
 
 				// raise new frame
 				raiseNewFrame( pFrame );
-			}
-			else
-			{
 				return;
 			}
 		}
-		else
-		{
-			return;
-		}
+		std::cerr << "Data allocate failed" << std::endl;
 		#pragma endregion
 	}
 
+	/**
+	 * Update VideoMode and compute some information
+	 */
 	void UpdateVideoMode()
 	{
 		// get current mode
@@ -283,7 +329,7 @@ protected:
 		m_VideoMode.fps			= int( m_Camera.get( CV_CAP_PROP_FPS ) );
 		m_VideoMode.pixelFormat	= ONI_PIXEL_FORMAT_RGB888;
 
-		// precompute metadata
+		// pre-compute metadata
 		m_uStride	= m_VideoMode.resolutionX * sizeof( OniRGB888Pixel );
 		m_uDataSize	= m_uStride * m_VideoMode.resolutionY;
 	}
@@ -301,14 +347,21 @@ protected:
 	OniVideoMode			m_VideoMode;
 };
 
+/**
+ * Device
+ */
 class OpenCV_Camera_Device : public oni::driver::DeviceBase
 {
 public:
-	OpenCV_Camera_Device(OniDeviceInfo* pInfo, const std::vector<OniVideoMode>& rTestMode, oni::driver::DriverServices& driverServices ) : m_pInfo(pInfo), m_driverServices(driverServices)
+	/**
+	 * Constructor
+	 */
+	OpenCV_Camera_Device( OniDeviceInfo* pInfo, const std::vector<OniVideoMode>& rTestMode, oni::driver::DriverServices& driverServices ) : m_pInfo(pInfo), m_driverServices(driverServices)
 	{
 		m_bCreated = false;
 		m_sensors[0].sensorType = ONI_SENSOR_COLOR;
 
+		// check if the given VideoMode is supported
 		std::set<OniVideoMode> vSupportedMode;
 		cv::VideoCapture mCamera( pInfo->usbProductId );
 		if( mCamera.isOpened() )
@@ -326,7 +379,7 @@ public:
 
 			vSupportedMode.insert( mMode );
 
-			// test mode
+			// test modes
 			for( auto itMode = rTestMode.begin(); itMode != rTestMode.end(); ++ itMode )
 			{
 				if( mCamera.set( CV_CAP_PROP_FRAME_WIDTH, itMode->resolutionX ) &&
@@ -344,6 +397,7 @@ public:
 
 			mCamera.release();
 
+			// Set OpenNI data
 			m_sensors[0].numSupportedVideoModes = int(vSupportedMode.size());
 			m_sensors[0].pSupportedVideoModes = new OniVideoMode[ vSupportedMode.size() ];
 			int	iIdx = 0;
@@ -356,18 +410,21 @@ public:
 
 			m_bCreated = true;
 		}
+		else
+		{
+			m_driverServices.errorLoggerAppend( "Can't open OpenCV camera %d", pInfo->usbProductId );
+		}
 	}
 
-	~OpenCV_Camera_Device()
-	{
-	}
+	/**
+	 * Destructor
+	 */
+	~OpenCV_Camera_Device(){}
 
-	OniDeviceInfo* GetInfo()
-	{
-		return m_pInfo;
-	}
-
-	OniStatus getSensorInfoList(OniSensorInfo** pSensors, int* numSensors)
+	/**
+	 * getSensorInfoList
+	 */
+	OniStatus getSensorInfoList( OniSensorInfo** pSensors, int* numSensors )
 	{
 		*numSensors = 1;
 		*pSensors = m_sensors;
@@ -375,7 +432,10 @@ public:
 		return ONI_STATUS_OK;
 	}
 
-	oni::driver::StreamBase* createStream(OniSensorType sensorType)
+	/**
+	 * create Stream
+	 */
+	oni::driver::StreamBase* createStream( OniSensorType sensorType )
 	{
 		if (sensorType == ONI_SENSOR_COLOR)
 		{
@@ -383,50 +443,61 @@ public:
 			return pImage;
 		}
 
-		m_driverServices.errorLoggerAppend( "OpenCV Can't create a stream of type %d", sensorType);
+		m_driverServices.errorLoggerAppend( "OpenCV only provide color sensor" );
 		return NULL;
 	}
 
-	void destroyStream(oni::driver::StreamBase* pStream)
+	/**
+	 * destroy Stream
+	 */
+	void destroyStream( oni::driver::StreamBase* pStream )
 	{
 		delete pStream;
 	}
 
-	OniStatus  getProperty(int propertyId, void* data, int* pDataSize)
+	/**
+	 * get Property
+	 */
+	OniStatus getProperty( int propertyId, void* data, int* pDataSize )
 	{
-		OniStatus rc = ONI_STATUS_OK;
-
 		switch (propertyId)
 		{
 		case ONI_DEVICE_PROPERTY_DRIVER_VERSION:
 			{
-				if (*pDataSize == sizeof(OniVersion))
+				if( *pDataSize == sizeof(OniVersion) )
 				{
 					OniVersion* version = (OniVersion*)data;
-					version->major = version->minor = version->maintenance = version->build = 2;
+					version->major			= 0;
+					version->minor			= 3;
+					version->maintenance		= 0;
+					version->build			= 0;
+					return ONI_STATUS_OK;
 				}
 				else
 				{
-					m_driverServices.errorLoggerAppend("Unexpected size: %d != %d\n", *pDataSize, sizeof(OniVersion));
-					rc = ONI_STATUS_ERROR;
+					m_driverServices.errorLoggerAppend( "Unexpected size: %d != %d\n", *pDataSize, sizeof(OniVersion) );
+					return ONI_STATUS_ERROR;
 				}
 			}
 			break;
+
 		default:
-			m_driverServices.errorLoggerAppend("Unknown property: %d\n", propertyId);
-			rc = ONI_STATUS_ERROR;
+			m_driverServices.errorLoggerAppend( "Unknown property: %d\n", propertyId );
+			return ONI_STATUS_ERROR;
 		}
-		return rc;
 	}
 
+	/**
+	 * make sure if this device is created
+	 */
 	bool Created() const
 	{
 		return m_bCreated;
 	}
 
 private:
-	OpenCV_Camera_Device(const OpenCV_Camera_Device&);
-	void operator=(const OpenCV_Camera_Device&);
+	OpenCV_Camera_Device( const OpenCV_Camera_Device& );
+	void operator=( const OpenCV_Camera_Device& );
 
 	bool			m_bCreated;
 	OniDeviceInfo*	m_pInfo;
@@ -434,9 +505,15 @@ private:
 	oni::driver::DriverServices& m_driverServices;
 };
 
+/**
+ * Driver
+ */
 class OpenCV_Camera_Driver : public oni::driver::DriverBase
 {
 public:
+	/**
+	 * Constructor
+	 */
 	OpenCV_Camera_Driver(OniDriverServices* pDriverServices) : DriverBase(pDriverServices)
 	{
 		// default values
@@ -454,9 +531,11 @@ public:
 				std::string sLine;
 				while( std::getline( fileSetting, sLine ) )
 				{
+					// ignore comment begin with ';'
 					if( sLine.size() < 5 || sLine[0] == ';' )
 						continue;
 	
+					// split with '='
 					size_t uPos = sLine.find_first_of( '=' );
 					if( uPos != std::string::npos )
 					{
@@ -487,25 +566,31 @@ public:
 			}
 			else
 			{
+				// default video mode
 				m_vModeToTest.push_back( BuildMode( 320, 240, 30 ) );
 				m_vModeToTest.push_back( BuildMode( 640, 480, 30 ) );
 			}
 		}
 		catch( std::exception e )
 		{
-			e.what();
+			getServices().errorLoggerAppend( "Setting file read error '%s'", e.what() );
 		}
 	}
 
+	/**
+	 * Initialize
+	 */
 	OniStatus initialize(	oni::driver::DeviceConnectedCallback connectedCallback,
 							oni::driver::DeviceDisconnectedCallback disconnectedCallback,
 							oni::driver::DeviceStateChangedCallback deviceStateChangedCallback,
 							void* pCookie )
 	{
-		if( oni::driver::DriverBase::initialize(connectedCallback, disconnectedCallback, deviceStateChangedCallback, pCookie) == ONI_STATUS_OK )
+		OniStatus eRes = oni::driver::DriverBase::initialize( connectedCallback, disconnectedCallback, deviceStateChangedCallback, pCookie );
+		if( eRes == ONI_STATUS_OK )
 		{
 			if( m_bListDevice )
 			{
+				// test how many OpenCV devices work on this machine
 				int iCounter = 0;
 				while( iCounter < m_iMaxTestNum )
 				{
@@ -529,11 +614,15 @@ public:
 					}
 				}
 			}
+			return ONI_STATUS_OK;
 		}
-		return ONI_STATUS_OK;
+		return eRes;
 	}
 
-	virtual oni::driver::DeviceBase* deviceOpen(const char* uri)
+	/**
+	 * Open device
+	 */
+	oni::driver::DeviceBase* deviceOpen(const char* uri)
 	{
 		std::string sUri = uri;
 
@@ -565,12 +654,16 @@ public:
 			}
 		}
 
-		getServices().errorLoggerAppend( "Looking for '%s'", uri );
+		getServices().errorLoggerAppend( "Can't find device: '%s'", uri );
 		return NULL;
 	}
 
-	virtual void deviceClose( oni::driver::DeviceBase* pDevice )
+	/**
+	 * Close device
+	 */
+	void deviceClose( oni::driver::DeviceBase* pDevice )
 	{
+		// find in device list
 		for( auto itDevice = m_mDevices.begin(); itDevice != m_mDevices.end(); ++ itDevice )
 		{
 			auto& rDeviceData = itDevice->second;
@@ -583,9 +676,14 @@ public:
 		}
 	}
 
-	virtual OniStatus tryDevice( const char* uri )
+	/**
+	 * Test given URI
+	 */
+	OniStatus tryDevice( const char* uri )
 	{
 		std::string sUri = uri;
+
+		// Find in list first
 		auto itDevice = m_mDevices.find( sUri );
 		if( itDevice != m_mDevices.end() )
 		{
@@ -593,7 +691,7 @@ public:
 		}
 		else
 		{
-			// not found existed, and is not listed
+			// not found existed, and does not listed when initialization
 			if( !m_bListDevice )
 			{
 				// check if URI prefix is correct
@@ -621,6 +719,9 @@ public:
 		return DriverBase::tryDevice(uri);
 	}
 
+	/**
+	 * Shutdown
+	 */
 	void shutdown()
 	{
 		for( auto itDevice = m_mDevices.begin(); itDevice != m_mDevices.end(); ++ itDevice )
@@ -632,7 +733,10 @@ public:
 	}
 
 protected:
-	virtual void CreateDeviceInfo( const std::string& sUri, uint16_t idx )
+	/**
+	 * prepare OniDeviceInfo and device list
+	 */
+	void CreateDeviceInfo( const std::string& sUri, uint16_t idx )
 	{
 		// Construct OniDeviceInfo
 		OniDeviceInfo* pInfo = new OniDeviceInfo();
