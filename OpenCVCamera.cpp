@@ -79,8 +79,9 @@ class OpenCV_Color_Stream : public oni::driver::StreamBase
 public:
 	OpenCV_Color_Stream( int iDeviceId ) : oni::driver::StreamBase()
 	{
-		m_iFrameId	= 0;
-		m_pThread	= NULL;
+		m_iFrameId		= 0;
+		m_bMirroring	= false;
+		m_pThread		= NULL;
 		m_Camera.open(iDeviceId);
 		UpdateVideoMode();
 	}
@@ -109,9 +110,10 @@ public:
 
 	OniStatus getProperty(int propertyId, void* data, int* pDataSize)
 	{
-		if (propertyId == ONI_STREAM_PROPERTY_VIDEO_MODE)
+		switch( propertyId )
 		{
-			if (*pDataSize == sizeof(OniVideoMode))
+		case ONI_STREAM_PROPERTY_VIDEO_MODE:
+			if( *pDataSize == sizeof(OniVideoMode) )
 			{
 				(*(OniVideoMode*)data) = m_VideoMode;
 				return ONI_STATUS_OK;
@@ -121,15 +123,31 @@ public:
 				printf("Unexpected size: %d != %d\n", *pDataSize, sizeof(OniVideoMode));
 				return ONI_STATUS_ERROR;
 			}
-		}
+			break;
 
-		return ONI_STATUS_NOT_IMPLEMENTED;
+		case ONI_STREAM_PROPERTY_MIRRORING:
+			if( *pDataSize == sizeof(OniBool) )
+			{
+				*((OniBool*)data) = m_bMirroring;
+				return ONI_STATUS_OK;
+			}
+			else
+			{
+				printf("Unexpected size: %d != %d\n", *pDataSize, sizeof(OniBool));
+				return ONI_STATUS_ERROR;
+			}
+			break;
+
+		default:
+			return ONI_STATUS_NOT_IMPLEMENTED;
+		}
 	}
 
 	OniStatus setProperty(int propertyId, const void* data, int dataSize)
 	{
-		if (propertyId == ONI_STREAM_PROPERTY_VIDEO_MODE)
+		switch( propertyId )
 		{
+		case ONI_STREAM_PROPERTY_VIDEO_MODE:
 			if (dataSize == sizeof(OniVideoMode))
 			{
 				OniVideoMode& rMode = *(OniVideoMode*)data;
@@ -150,9 +168,24 @@ public:
 				printf("Unexpected size: %d != %d\n", dataSize, sizeof(OniVideoMode));
 				return ONI_STATUS_ERROR;
 			}
-		}
+			break;
 
-		return ONI_STATUS_NOT_IMPLEMENTED;
+		case ONI_STREAM_PROPERTY_MIRRORING:
+			if( dataSize == sizeof(OniBool) )
+			{
+				m_bMirroring = *((OniBool*)data);
+				return ONI_STATUS_OK;
+			}
+			else
+			{
+				printf("Unexpected size: %d != %d\n", dataSize, sizeof(OniBool));
+				return ONI_STATUS_ERROR;
+			}
+			break;
+
+		default:
+			return ONI_STATUS_NOT_IMPLEMENTED;
+		}
 	}
 	
 	void addRefToFrame(OniDriverFrame* pFrame)
@@ -192,6 +225,12 @@ protected:
 
 		// convert image form BGR to RGB
 		cv::cvtColor( mImg, m_FrameRBG, CV_BGR2RGB );
+
+		if( m_bMirroring )
+		{
+			cv::flip( m_FrameRBG, mImg, 1 );
+			m_FrameRBG = mImg;
+		}
 		#pragma endregion
 
 		#pragma region Build OniDriverFrame
@@ -254,6 +293,7 @@ protected:
 protected:
 	int		m_iFrameId;
 	bool	m_bRunning;
+	OniBool	m_bMirroring;
 	size_t	m_uDataSize;
 	size_t	m_uStride;
 
