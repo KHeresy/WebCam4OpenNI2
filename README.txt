@@ -24,7 +24,7 @@ User can modify some setting of this driver module by put the file "OpenCVCamera
 The sample of this file: https://github.com/KHeresy/WebCam4OpenNI2/blob/master/OpenCVCamera.ini
 
 1. "device_name" is the prefix of uri. The full URI is the prefix and a number.
-For example, the uri of first webcam is "\OpenCV\Camera\1".
+For example, the uri of first webcam is "\OpenCV\Camera\0".
 
 2. Set "list_device" as 0 if you don't want to use this device immediately.
 The webcam will not been list when call OpenNI::enumerateDevices(), but you still can create the device by specified uri.
