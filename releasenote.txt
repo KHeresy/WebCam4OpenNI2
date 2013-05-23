@@ -1,4 +1,7 @@
-2013/05/xx V03 (working)
+2013/06/xx V04 (working)
+ * Use OpenNI 2.2
+
+2013/05/xx V03 - final version for OpenNI 2.1
  * Not test camera at initialization when list_device=0
  * Use OpenNI error log system in VideoStream
  * Add source code comments
