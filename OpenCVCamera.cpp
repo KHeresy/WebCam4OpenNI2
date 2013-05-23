@@ -3,7 +3,6 @@
 
 // STL Header
 #include <fstream>
-#include <iostream>
 #include <map>
 #include <vector>
 #include <set>
@@ -110,7 +109,7 @@ public:
 			m_pThread = new std::thread( threadFunc, this );
 			return ONI_STATUS_OK;
 		}
-		std::cerr << "The OpenCV camera is not opened." << std::endl;
+		m_driverServices.errorLoggerAppend( "The OpenCV camera is not opened." );
 		return ONI_STATUS_ERROR;
 	}
 
@@ -264,9 +263,7 @@ protected:
 		OniFrame* pFrame = getServices().acquireFrame();
 		if( pFrame != NULL )
 		{
-			// create the buffer of image
-			pFrame->data = new unsigned char[m_uDataSize];
-			if( pFrame->data != NULL )
+			if( pFrame->dataSize ==  m_uDataSize )
 			{
 				// copy data from cv::Mat to OniDriverFrame
 				pFrame->dataSize = int(m_uDataSize);
@@ -285,10 +282,17 @@ protected:
 
 				// raise new frame
 				raiseNewFrame( pFrame );
-				return;
 			}
+			else
+			{
+				m_driverServices.errorLoggerAppend( "Data size not match" );
+			}
+			getServices().releaseFrame( pFrame );
 		}
-		std::cerr << "Data allocate failed" << std::endl;
+		else
+		{
+			m_driverServices.errorLoggerAppend( "Data allocate failed" );
+		}
 		#pragma endregion
 	}
 
