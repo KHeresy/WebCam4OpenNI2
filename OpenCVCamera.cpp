@@ -3,7 +3,6 @@
 
 // STL Header
 #include <fstream>
-#include <iostream>
 #include <map>
 #include <vector>
 #include <set>
@@ -110,7 +109,7 @@ public:
 			m_pThread = new std::thread( threadFunc, this );
 			return ONI_STATUS_OK;
 		}
-		std::cerr << "The OpenCV camera is not opened." << std::endl;
+		m_driverServices.errorLoggerAppend( "The OpenCV camera is not opened." );
 		return ONI_STATUS_ERROR;
 	}
 
@@ -313,8 +312,12 @@ protected:
 				raiseNewFrame( pFrame );
 				return;
 			}
+			else
+			{
+				delete pFrame;
+			}
 		}
-		std::cerr << "Data allocate failed" << std::endl;
+		m_driverServices.errorLoggerAppend( "Data allocate failed" );
 		#pragma endregion
 	}
 
