@@ -16,6 +16,9 @@ Notice:
 
 2. The driver module may has higher priority than OpenNI, so openni::ANY_DEVICE may get a webcam, not Xtion.
 
+3. You may need to install "Visual C++ Redistributable for Visual Studio 2012 Update 1", since I build the binary with Visual Studio 2012.
+   The files could be found at: http://www.microsoft.com/en-us/download/details.aspx?id=30679
+
 
 ==============
 
@@ -45,5 +48,7 @@ To build this by youeself, you need OpenNI2 source code and OpenCV
 2. http://opencv.org/
 
 Please put the files "OpenCVCamera.cpp" and "OpenCVCamera.vcxproj" in a folder under OpenNI2\Source\Drivers\ (ex: OpenNI2\Source\Drivers\WebCam4OpenNI2), and modify the project setting for OpenCV path.
+
+Because I use C++11 thread in this project, which is not supported in VC2010, so you may need to use boost::thread to replace it when using Visual Studio 2010.
 
 Although I only test under Windows, but this module should also work under other platforms.
